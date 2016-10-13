@@ -46,6 +46,7 @@ class DelegateViewSet(ModelViewSet):
 
     def list(self, request, *args, **kwargs):
         # NOTE: Override is necessary otherwise related fields are not listed.
-        qs = User.objects.all()
+        # TODO: Limit users to delegates group?
+        qs = User.objects.filter(groups=2)
         serializer = DelegateSerializer(qs, many=True)
         return Response(serializer.data)

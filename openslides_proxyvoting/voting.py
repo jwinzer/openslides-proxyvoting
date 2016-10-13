@@ -36,15 +36,6 @@ class Ballot:
     Creates, deletes, updates MotionPollBallot objects for a given MotionPoll object.
     Registers votes including proxy votes.
     """
-    from decimal import Decimal
-    RESULT = {
-        'Y': [0, Decimal(0)],  # [heads, shares]
-        'N': [0, Decimal(0)],
-        'A': [0, Decimal(0)],
-        'casted': [0, Decimal(0)],
-        'valid': [0, Decimal(0)],
-        'invalid': [0, Decimal(0)]
-    }
 
     # TODO: Add un-weighed voting (category=None).
     # TODO: Add shares precision. Proposal: category.name 'MEA-3'
@@ -57,7 +48,7 @@ class Ballot:
         self.poll = poll
         self.admitted_delegates = None
         self.updated = 0
-        self.result = self.RESULT
+        self._clear_result()
 
     def delete_ballots(self):
         """
@@ -66,7 +57,7 @@ class Ballot:
         :return: Number of ballots deleted.
         """
         self.updated, l = MotionPollBallot.objects.filter(poll=self.poll).delete()
-        self.result = self.RESULT
+        self._clear_result()
         return self.updated
 
     def create_absentee_ballots(self):
@@ -78,8 +69,8 @@ class Ballot:
         # Get a list of delegate IDs who have voting rights (shares) for the given motion.
         # TODO: Does the proxy have to be present (user.is_present) for an absentee vote to be counted?
         delegates = User.objects.filter(
-            votingshare__category=self.poll.motion.category,
-            votingshare__shares__gt=0
+            shares__category=self.poll.motion.category,
+            shares__shares__gt=0
         ).values_list('id', flat=True)
 
         qs = AbsenteeVote.objects.filter(
@@ -114,8 +105,8 @@ class Ballot:
         # Get a list of delegate IDs who have voting rights (shares) for the given motion and haven't cast an
         # absentee ballot.
         self.admitted_delegates = User.objects.filter(
-            votingshare__category=self.poll.motion.category,
-            votingshare__shares__gt=0
+            shares__category=self.poll.motion.category,
+            shares__shares__gt=0
         ).exclude(
             absenteevote__motion=self.poll.motion
         ).values_list('id', flat=True)
@@ -132,7 +123,7 @@ class Ballot:
         """
         # Create a dict (key: delegate, value: shares).
         # Example: {1: Decimal('1.000000'), 2: Decimal('45.120000'}
-        qs = VotingShare.objects.filter(category=self.poll.motion.category)
+        qs = VotingShare.objects.filter(category_id=self.poll.motion.category_id)
         shares = dict(qs.values_list('delegate', 'shares'))
 
         # Convert the ballots into a list of (delegate, vote) tuples.
@@ -141,7 +132,7 @@ class Ballot:
         votes = qs.values_list('delegate', 'vote')
 
         # Sum up the votes.
-        self.result = self.RESULT
+        self._clear_result()
         for vote in votes:
             k = vote[1]
             sh = shares[vote[0]]
@@ -162,3 +153,15 @@ class Ballot:
             MotionPollBallot.objects.update_or_create(
                 poll=self.poll, delegate=delegate, defaults={'vote': vote})
             self.updated += 1
+
+    def _clear_result(self):
+        from decimal import Decimal
+        self.result = {
+            'Y': [0, Decimal(0)],  # [heads, shares]
+            'N': [0, Decimal(0)],
+            'A': [0, Decimal(0)],
+            'casted': [0, Decimal(0)],
+            'valid': [0, Decimal(0)],
+            'invalid': [0, Decimal(0)]
+        }
+

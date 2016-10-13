@@ -1,0 +1,3 @@
+To uses MySQL:
+pip3 install mysqlclient
+

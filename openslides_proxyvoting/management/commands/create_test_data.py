@@ -2,7 +2,7 @@ from django.db import IntegrityError
 from django.core.management.base import BaseCommand
 
 from openslides.motions.models import Category, Motion, MotionPoll
-from openslides.users.models import User
+from openslides.users.models import User, Group
 from openslides_proxyvoting import models
 from openslides_votecollector.models import Keypad
 
@@ -36,9 +36,11 @@ class Command(BaseCommand):
             (21, 'Elisabeth', 'Engler', 3, 21.21),
             (22, 'Frieda', 'Fischer', 2, 22.22),
         )
+        delegates_group = Group.objects.get(name='Delegates')
         for d in delegates:
             user = User(id=d[0], username=d[1], last_name=d[1], first_name=d[2], is_active=True, is_present=True)
-            user.groups.add(2)
+            user.save()
+            user.groups.add(delegates_group)
             user.save()
             print('Created %s' % user)
             vs = models.VotingShare(delegate=user, category_id=1, shares=d[3])

@@ -1,0 +1,46 @@
+TODAY
+x Submenues
+x Edit button
+- Create delegate form view template
+- Populate template
+
+
+- Test permissions
+
+
+Views:
+
+Delegate list view
+- Delegate (edit)
+- Present
+- Keypad
+- Proxy (vertreten durch)
+- 0 to 3 Category columns
+
+Delegate detail view (nice to have)
+- Delegate (edit)
+- Present
+- Keypad
+- Seat
+- Representative
+- Mandates (list)
+- Shares (list)
+- Absentee votes (list)
+
+Attendance list view
+- Category
+- Total
+- Attending
+
+Absentee votes list view
+- Delegate
+- Motion
+- Vote
+
+Delegate form view:
+- Delegate
+- Present
+- Keypad
+- Seat
+- Representative
+- Mandates (list)
