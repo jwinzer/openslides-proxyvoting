@@ -5,6 +5,12 @@ x Edit button
 - Populate template
 
 
+DESIGN
+class Delegate(User):
+    proxy
+
+
+
 - Test permissions
 
 

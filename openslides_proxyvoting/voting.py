@@ -145,7 +145,7 @@ class Ballot:
 
     def _register_proxy_votes(self, voter, vote):
         self._create_ballot(voter, vote)
-        for proxy in voter.proxies.all():
+        for proxy in voter.mandates.all():
             self._register_proxy_votes(proxy.delegate, vote)
 
     def _create_ballot(self, delegate, vote):

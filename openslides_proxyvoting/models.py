@@ -32,7 +32,7 @@ class VotingProxy(RESTModelMixin, models.Model):
     access_permissions = VotingProxyAccessPermissions()
 
     delegate = models.OneToOneField(User, on_delete=models.CASCADE)
-    proxy = models.ForeignKey(User, on_delete=models.CASCADE, related_name='proxies')
+    proxy = models.ForeignKey(User, on_delete=models.CASCADE, related_name='mandates')
 
     class Meta:
         default_permissions = ()

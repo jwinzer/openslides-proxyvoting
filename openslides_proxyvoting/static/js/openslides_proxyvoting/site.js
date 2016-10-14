@@ -44,6 +44,12 @@ angular.module('OpenSlidesApp.openslides_proxyvoting.site', [
                 categories: function (Category) {
                     return Category.findAll();
                 },
+                keypads: function (Keypad) {
+                    return Keypad.findAll();
+                },
+                seats: function (Seat) {
+                    return Seat.findAll();
+                },
                 proxies: function (VotingProxy) {
                     return VotingProxy.findAll();
                 }
@@ -54,10 +60,10 @@ angular.module('OpenSlidesApp.openslides_proxyvoting.site', [
     
 // Service for generic delegate form (update only)
 .factory('DelegateForm', [
-    'Delegate',
+    'gettextCatalog',
     'User',
-    'Keypad',
-    function (Delegate, User, Keypad) {
+    'Seat',
+    function (gettextCatalog, User, Seat) {
         return {
             getDialog: function (delegate) {
                 return {
@@ -74,7 +80,7 @@ angular.module('OpenSlidesApp.openslides_proxyvoting.site', [
                 }
             },
             getFormFields: function (id) {
-                var reps = User.filter({
+                var otherDelegates = User.filter({
                     where: {
                         id: {
                             '!=': id
@@ -84,23 +90,49 @@ angular.module('OpenSlidesApp.openslides_proxyvoting.site', [
                     orderBy: ['last_name', 'first_name']
                 });
                 return [
-                    //{
-                    //    key: 'keypad.keypad_id',
-                    //    type: 'input',
-                    //    templateOptions: {
-                    //        label: 'Keypad ID',
-                    //        type: 'number',
-                    //        required: true
-                    //    }
-                    //},
+                    {
+                        key: 'keypad_id',
+                        type: 'input',
+                        templateOptions: {
+                            label: gettextCatalog.getString('Keypad ID'),
+                            type: 'number',
+                        }
+                    },
+                    {
+                        key: 'seat_id',
+                        type: 'select-single',
+                        templateOptions: {
+                            label: gettextCatalog.getString('Seat'),
+                            options: Seat.getAll(),
+                            ngOptions: 'option.id as option.number for option in to.options',
+                            placeholder: gettextCatalog.getString('--- Select seat ---')
+                        }
+                    },
+                    {
+                        key: 'is_present',
+                        type: 'checkbox',
+                        templateOptions: {
+                            label: gettextCatalog.getString('Present')
+                        }
+                    },
                     {
                         key: 'proxy_id',
                         type: 'select-single',
                         templateOptions: {
-                            label: 'Representative',
-                            options: reps,
+                            label: gettextCatalog.getString('Represented by (proxy)'),
+                            options: otherDelegates,
                             ngOptions: 'option.id as option.full_name for option in to.options',
-                            placeholder: '(Representative)'
+                            placeholder: '(' + gettextCatalog.getString('No proxy') + ')'
+                        }
+                    },
+                    {
+                        key: 'mandates_id',
+                        type: 'select-multiple',
+                        templateOptions: {
+                            label: gettextCatalog.getString('Mandates'),
+                            options: otherDelegates,
+                            ngOptions: 'option.id as option.full_name for option in to.options',
+                            placeholder: '(' + gettextCatalog.getString('No mandates') + ')'
                         }
                     }
                 ];
@@ -136,9 +168,9 @@ angular.module('OpenSlidesApp.openslides_proxyvoting.site', [
 
         // Define custom search filter string.
         $scope.getFilterString = function (delegate) {
-            var rep = '', keypad = '';
-            if (delegate.proxy) {
-                rep = delegate.proxy.rep.full_name;
+            var rep = '', keypad = '', vp = delegate.getProxy();
+            if (vp) {
+                rep = vp.rep.full_name;
             }
             if (delegate.keypad) {
                 keypad = delegate.keypad.keypad_id;
@@ -162,6 +194,15 @@ angular.module('OpenSlidesApp.openslides_proxyvoting.site', [
                 }
             }
         }).length;
+        //$scope.registered = function () {
+        //    var count = 0;
+        //    Delegate.getAll().forEach(function (delegate) {
+        //        if (delegate.getProxy() === null && delegate.user.is_present && delegate.keypad !== null) {
+        //            count++;
+        //        }
+        //    })
+        //    return count;
+        //};
 
         // Count represented delegates, i.e. delegates with a proxy.
         $scope.represented = Delegate.filter({
@@ -182,52 +223,36 @@ angular.module('OpenSlidesApp.openslides_proxyvoting.site', [
 .controller('DelegateUpdateCtrl', [
     '$scope',
     'Delegate',
-    'VotingProxy',
+    'User',
     'DelegateForm',
     'delegate',
-    function ($scope, Delegate, VotingProxy, DelegateForm, delegate) {
+    function ($scope, Delegate, User, DelegateForm, delegate) {
         $scope.alert = {};
 
-        $scope.model = {
-            id: delegate.id,
-            user: delegate.user,
-            votingproxy_id: delegate.votingproxy_id
-        }
-        if (delegate.proxy) {
-            $scope.model.proxy_id = delegate.proxy.proxy_id;
-        }
+        var kp = delegate.getKeypad(),
+            vp = delegate.getProxy();
+        delegate.keypad_id = kp ? kp.keypad_id : null;
+        delegate.seat_id = kp ? kp.seat_id : null;
+        delegate.is_present = delegate.user.is_present;
+        delegate.proxy_id = vp ? vp.proxy_id : null;
+        delegate.mandates_id = delegate.getMandates().map(function (vp) { return vp.delegate_id });
+
+        $scope.model = delegate;
 
         // Get all form fields.
         $scope.formFields = DelegateForm.getFormFields(delegate.id);
 
         $scope.save = function (delegate) {
-            if (delegate.votingproxy_id) {
-                var proxy = VotingProxy.get(delegate.votingproxy_id);
-                if (delegate.proxy_id) {
-                    proxy.proxy_id = delegate.proxy_id;
-                    // TODO: handle save failure, do not close dialog
-                    VotingProxy.save(proxy);
-                }
-                else {
-                    VotingProxy.destroy(proxy).then(
-                        function (id) {
-                            delegate.votingproxy_id = undefined;
-                            Delegate.inject(delegate);
-                        }
-                    );
-                }
-            }
-            else {
-                VotingProxy.create(
-                    { delegate_id: delegate.id, proxy_id: delegate.proxy_id },
-                    { cacheResponse: true }).then(
-                    function (proxy) {
-                        delegate.votingproxy_id = proxy.id;
-                        delegate.proxy = proxy;
-                        Delegate.inject(delegate);
-                    }
-                );
-            }
+            delegate.updateKeypad();
+            delegate.updateMandates();
+            delegate.updateProxy();
+
+            delegate.user.is_present = delegate.is_present;
+            User.save(delegate.id);
+
+            // TODO: call save after all is done to validate. Process failure.
+            Delegate.save(delegate);
+
 
             $scope.closeThisDialog();
         };
