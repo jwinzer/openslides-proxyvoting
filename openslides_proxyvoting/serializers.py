@@ -26,22 +26,20 @@ class AbsenteeVoteSerializer(ModelSerializer):
 
 
 class DelegateSerializer(ModelSerializer):
-    # TODO: allow only get
+    # Web client retrieves votingproxy, shares and keypad directly from server.
     # votingproxy = VotingProxySerializer(read_only=True)
-    shares = VotingShareSerializer(many=True, read_only=True)
+    # shares = VotingShareSerializer(many=True, read_only=True)
     # keypad = KeypadSerializer(read_only=True)
 
-    # votingproxy_id = serializers.IntegerField(source='votingproxy.id', allow_null=True)
+    proxy_id = serializers.IntegerField(source='votingproxy.proxy_id', allow_null=True)
 
     class Meta:
         model = User
-        fields = ('id', 'shares', )
-
-    def create(self, validated_data):
-        return None
+        fields = ('id', 'proxy_id', )
+        read_only_fields = ('id', 'proxy_id', )
 
     def update(self, instance, validated_data):
-        # TODO: validate proxy and mandates
+        # FIXME: validate proxy (circular ref!) and mandates and return error if it fails.
         from openslides.utils.autoupdate import inform_changed_data
         # inform_changed_data(instance)
         return instance

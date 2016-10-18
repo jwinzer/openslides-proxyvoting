@@ -38,7 +38,7 @@ class Command(BaseCommand):
         )
         delegates_group = Group.objects.get(name='Delegates')
         for d in delegates:
-            user = User(id=d[0], username=d[1], last_name=d[1], first_name=d[2], is_active=True, is_present=True)
+            user = User(id=d[0], username=d[1], first_name=d[1], last_name=d[2], is_active=True, is_present=True)
             user.save()
             user.groups.add(delegates_group)
             user.save()

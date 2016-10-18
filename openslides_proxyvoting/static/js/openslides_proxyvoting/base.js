@@ -8,6 +8,29 @@ angular.module('OpenSlidesApp.openslides_proxyvoting', [
     'OpenSlidesApp.openslides_votecollector'
 ])
 
+.factory('VotingShare', [
+    'DS',
+    'User',
+    'Category',
+    function (DS, User, Category) {
+        return DS.defineResource({
+            name: 'openslides_proxyvoting/votingshare',
+            relations: {
+                belongsTo: {
+                    'users/user': {
+                        localField: 'user',
+                        localKey: 'delegate_id'
+                    },
+                    'motions/category': {
+                        localField: 'category',
+                        localKey: 'category_id'
+                    }
+                }
+            }
+        });
+    }
+])
+
 .factory('VotingProxy', [
     'DS',
     'User',
@@ -26,47 +49,31 @@ angular.module('OpenSlidesApp.openslides_proxyvoting', [
     }
 ])
 
-.factory('DelegateUpdate', [
-    // TODO: remove?
-    'Delegate',
-    'VotingProxy',
-    function (Delegate, VotingProxy) {
-        return {
-            saveProxy: function (delegate) {
-                var vp = delegate.getProxy();
-                if (delegate.proxy_id) {
-                    if (vp) {
-                        // Update vp.
-                        vp.proxy_id = delegate.proxy_id;
-                        VotingProxy.save(vp).then(
-                            function (vp) {
-                                Delegate.save(delegate);
-                            }
-                        );
-                    }
-                    else {
-                        // Create vp.
-                        VotingProxy.create(
-                            { delegate_id: delegate.id, proxy_id: delegate.proxy_id },
-                            { cacheResponse: true }
-                        ).then(
-                            function (vp) {
-                                Delegate.save(delegate);
-                            }
-                        );
+.factory('AbsenteeVote', [
+    'DS',
+    'User',
+    'Motion',
+    function (DS, User, Motion) {
+        return DS.defineResource({
+            name: 'openslides_proxyvoting/absenteevote',
+            relations: {
+                belongsTo: {
+                    'users/user': {
+                        localField: 'user',
+                        localKey: 'delegate_id'
+                    },
+                    'motions/motion': {
+                        localField: 'motion',
+                        localKey: 'motion_id'
                     }
                 }
-                else if (vp) {
-                    // Destroy vp.
-                    VotingProxy.destroy(vp).then(
-                        function (id) {
-                            Delegate.save(delegate);
-                        }
-                    );
+            },
+            computed: {
+                motion_title: function () {
+                    return this.motion !== undefined ? this.motion.getTitle() : null;
                 }
-                Delegate.save(delegate);
             }
-        }
+        });
     }
 ])
 
@@ -75,7 +82,8 @@ angular.module('OpenSlidesApp.openslides_proxyvoting', [
     'User',
     'Keypad',
     'VotingProxy',
-    function (DS, User, Keypad, VotingProxy) {
+    'VotingShare',
+    function (DS, User, Keypad, VotingProxy, VotingShare) {
         return DS.defineResource({
             name: 'openslides_proxyvoting/delegate',
             relations: {
@@ -87,7 +95,6 @@ angular.module('OpenSlidesApp.openslides_proxyvoting', [
                 }
             },
             computed: {
-                // computed is not updated when proxies change
                 proxy: function () {
                     return this.getProxy();
                 },
@@ -119,7 +126,7 @@ angular.module('OpenSlidesApp.openslides_proxyvoting', [
                 getMandates: function () {
                     return VotingProxy.filter({ proxy_id: this.id })
                 },
-                updateKeypad: function () {
+                updateKeypad: function (promises, onFailed) {
                     // Update keypad with this.keypad_id, this.seat.
                     // TODO: Catch create/save failures.
                     var kp = this.getKeypad();
@@ -128,51 +135,53 @@ angular.module('OpenSlidesApp.openslides_proxyvoting', [
                             // Update keypad.
                             kp.keypad_id = this.keypad_id;
                             kp.seat_id = this.seat_id;
-                            Keypad.save(kp);
+                            promises.push(Keypad.save(kp).then(null, function (error) {
+                                onFailed(error);
+                                Keypad.refresh(kp);
+                            }));
                         }
                         else {
                             // Create keypad.
-                            Keypad.create({
+                            promises.push(Keypad.create({
                                 user_id: this.id,
                                 keypad_id: this.keypad_id,
                                 seat_id: this.seat_id
-                            });
+                            }).then(null, onFailed));
                         }
                     }
                     else if (kp) {
                         // Destroy keypad.
-                        Keypad.destroy(kp);
+                        promises.push(Keypad.destroy(kp));
                     }
                 },
-                updateProxy: function () {
+                updateProxy: function (promises) {
                     // Update proxy to this.proxy_id.
                     var vp = this.getProxy();
                     if (this.proxy_id) {
                         if (vp) {
                             // Update vp.
                             vp.proxy_id = this.proxy_id;
-                            VotingProxy.save(vp);
+                            promises.push(VotingProxy.save(vp));
                         }
                         else {
                             // Create vp.
-                            VotingProxy.create({
+                            promises.push(VotingProxy.create({
                                 delegate_id: this.id,
                                 proxy_id: this.proxy_id
-                            });
+                            }));
                         }
                     }
                     else if (vp) {
                         // Destroy vp.
-                        VotingProxy.destroy(vp);
+                        promises.push(VotingProxy.destroy(vp));
                     }
                 },
-                deleteAllMandates: function () {
-                    var mandates = this.getMandates();
-                    for (var i = 0; i < mandates.length; i++) {
-                        VotingProxy.destroy(mandates[i]);
-                    }
+                deleteAllMandates: function (promises) {
+                    angular.forEach(this.getMandates(), function (vp) {
+                        promises.push(VotingProxy.destroy(vp));
+                    });
                 },
-                updateMandates: function () {
+                updateMandates: function (promises) {
                     // Update mandates to this.mandates_id list.
                     // Re-use existing mandates.
                     var m = 0,
@@ -186,41 +195,41 @@ angular.module('OpenSlidesApp.openslides_proxyvoting', [
                             }
                         }
                     });
-                    for (var i = 0; i < this.mandates_id.length; i++) {
-                        var id = this.mandates_id[i],
-                            vps = VotingProxy.filter({ delegate_id: id });
+                    angular.forEach(this.mandates_id, function (id) {
+                        var vps = VotingProxy.filter({ delegate_id: id });
                         if (vps.length > 0) {
                             // Update existing foreign mandate.
                             vps[0].proxy_id = this.id;
-                            VotingProxy.save(vps[0]);
+                            promises.push(VotingProxy.save(vps[0]));
                         }
                         else if (m < mandates.length) {
                             // Update existing mandate.
                             var vp = mandates[m++];
                             vp.delegate_id = id;
                             vp.proxy_id = this.id;
-                            VotingProxy.save(vp);
+                            promises.push(VotingProxy.save(vp));
                         }
                         else {
                             // Create new mandate.
-                            VotingProxy.create({
+                            promises.push(VotingProxy.create({
                                 delegate_id: id,
                                 proxy_id: this.id
-                            });
+                            }));
                         }
-                    };
+                    }, this);
 
                     // Delete left-over mandates.
                     for (; m < mandates.length; m++) {
-                        VotingProxy.destroy(mandates[m].id);
+                        promises.push(VotingProxy.destroy(mandates[m].id));
                     }
                 },
                 getShares: function (category_id) {
-                    var votingShare = _.find(this.shares, function (shares) {
-                        return shares.category_id == category_id;
+                    var vss = VotingShare.filter({
+                        delegate_id: this.id,
+                        category_id: category_id
                     });
                     // FIXME: Allow floating point shares.
-                    return votingShare !== undefined ? votingShare.shares.split('.')[0] : null;
+                    return vss.length == 1 ? vss[0].shares.split('.')[0] : null;
                 }
             }
         });
@@ -228,9 +237,11 @@ angular.module('OpenSlidesApp.openslides_proxyvoting', [
 ])
 
 .run([
+    'VotingShare',
     'VotingProxy',
+    'AbsenteeVote',
     'Delegate',
-    function (VotingProxy, Delegate) {}
+    function (VotingShare, VotingProxy, AbsenteeVote, Delegate) {}
 ])
 
 }());

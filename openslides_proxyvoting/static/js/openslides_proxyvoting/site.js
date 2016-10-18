@@ -50,8 +50,59 @@ angular.module('OpenSlidesApp.openslides_proxyvoting.site', [
                 seats: function (Seat) {
                     return Seat.findAll();
                 },
-                proxies: function (VotingProxy) {
+                votingProxies: function (VotingProxy) {
                     return VotingProxy.findAll();
+                },
+                votingShares: function (VotingShare) {
+                    return VotingShare.findAll();
+                }
+            }
+        })
+        .state('openslides_proxyvoting.delegate.import', {
+            url: '/import',
+            controller: 'VotingShareImportCtrl',
+            resolve: {
+                users: function (User) {
+                    return User.findAll(); // User.find({ groups_id: 2});  // TODO: limit to Delegate group?
+                },
+                categories: function (Category) {
+                    return Category.findAll();
+                },
+                votingShares: function (VotingShare) {
+                    return VotingShare.findAll();
+                }
+            }
+        })
+        .state('openslides_proxyvoting.absenteevote', {
+            url: '/absenteevote',
+            abstract: true,
+            template: "<ui-view/>"
+        })
+        .state('openslides_proxyvoting.absenteevote.list', {
+            resolve: {
+                absenteeVotes: function (AbsenteeVote) {
+                    AbsenteeVote.findAll();
+                },
+                users: function (User) {
+                    return User.findAll();
+                },
+                motions: function (Motion) {
+                    return Motion.findAll();
+                }
+            }
+        })
+        .state('openslides_proxyvoting.absenteevote.import', {
+            url: '/import',
+            controller: 'AbsenteevoteImportCtrl',
+            resolve: {
+                users: function (User) {
+                    return User.findAll();
+                },
+                motions: function (Motion) {
+                    return Motion.findAll();
+                },
+                absenteeVotes: function (AbsenteeVote) {
+                    return AbsenteeVote.findAll();
                 }
             }
         })
@@ -103,7 +154,7 @@ angular.module('OpenSlidesApp.openslides_proxyvoting.site', [
                         type: 'select-single',
                         templateOptions: {
                             label: gettextCatalog.getString('Seat'),
-                            options: Seat.getAll(),
+                            options: Seat.filter({ orderBy: 'number' }),
                             ngOptions: 'option.id as option.number for option in to.options',
                             placeholder: gettextCatalog.getString('--- Select seat ---')
                         }
@@ -143,21 +194,18 @@ angular.module('OpenSlidesApp.openslides_proxyvoting.site', [
     
 .controller('DelegateListCtrl', [
     '$scope',
-    '$http',
     'ngDialog',
     'DelegateForm',
     'Delegate',
     'VotingProxy',
-    'User',
     'Category',
-    function ($scope, $http, ngDialog, DelegateForm, Delegate, VotingProxy, User, Category) {
+    function ($scope, ngDialog, DelegateForm, Delegate, VotingProxy, Category) {
         Delegate.bindAll({}, $scope, 'delegates');
-        // User.bindAll({}, $scope, 'users');
         Category.bindAll({}, $scope, 'categories');
         $scope.alert = {};
 
-        // Set up table sorting.
-        $scope.sortColumn = 'delegate';
+        // Handle table column sorting.
+        $scope.sortColumn = 'first_name';
         $scope.reverse = false;
         $scope.toggleSort = function (column) {
             if ( $scope.sortColumn === column ) {
@@ -182,37 +230,6 @@ angular.module('OpenSlidesApp.openslides_proxyvoting.site', [
             ].join(' ');
         };
 
-        // Count registered delegates, i.e. delegates without proxy and present with keypad.
-        $scope.registered = Delegate.filter({
-            where: {
-                proxy: {
-                    '===': null
-                },
-                'user.is_present': true,
-                keypad: {
-                    '!==': null
-                }
-            }
-        }).length;
-        //$scope.registered = function () {
-        //    var count = 0;
-        //    Delegate.getAll().forEach(function (delegate) {
-        //        if (delegate.getProxy() === null && delegate.user.is_present && delegate.keypad !== null) {
-        //            count++;
-        //        }
-        //    })
-        //    return count;
-        //};
-
-        // Count represented delegates, i.e. delegates with a proxy.
-        $scope.represented = Delegate.filter({
-            where: {
-                proxy: {
-                    '!==': null
-                }
-            }
-        }).length;
-        
         // Open edit dialog.
         $scope.openDialog = function (delegate) {
             ngDialog.open(DelegateForm.getDialog(delegate));
@@ -222,39 +239,381 @@ angular.module('OpenSlidesApp.openslides_proxyvoting.site', [
 
 .controller('DelegateUpdateCtrl', [
     '$scope',
+    '$q',
     'Delegate',
     'User',
     'DelegateForm',
     'delegate',
-    function ($scope, Delegate, User, DelegateForm, delegate) {
-        $scope.alert = {};
-
+    function ($scope, $q, Delegate, User, DelegateForm, delegate) {
         var kp = delegate.getKeypad(),
-            vp = delegate.getProxy();
+            vp = delegate.getProxy(),
+            message = '',
+            onFailed = function (error) {
+                for (var e in error.data) {
+                    message += e + ': ' + error.data[e] + ' ';
+                }
+            };
+
         delegate.keypad_id = kp ? kp.keypad_id : null;
         delegate.seat_id = kp ? kp.seat_id : null;
         delegate.is_present = delegate.user.is_present;
         delegate.proxy_id = vp ? vp.proxy_id : null;
         delegate.mandates_id = delegate.getMandates().map(function (vp) { return vp.delegate_id });
 
+        $scope.alert = {};
         $scope.model = delegate;
 
         // Get all form fields.
         $scope.formFields = DelegateForm.getFormFields(delegate.id);
 
         $scope.save = function (delegate) {
-            delegate.updateKeypad();
-            delegate.updateMandates();
-            delegate.updateProxy();
+            // Update keypad, proxy, mandates, user and collect their promises.
+            var promises = [];
+            delegate.updateKeypad(promises, onFailed);
+            delegate.updateProxy(promises);
+            delegate.updateMandates(promises);
 
             delegate.user.is_present = delegate.is_present;
-            User.save(delegate.id);
+            promises.push(User.save(delegate.id));
 
-            // TODO: call save after all is done to validate. Process failure.
-            Delegate.save(delegate);
+            // Save delegate after all promises have been resolved.
+            // Delegate together with keypad, proxy and mandates is validated by the server.
+            $q.all(promises).then(function () {
+                if (message) {
+                    $scope.alert = {type: 'danger', msg: message, show: true};
+                }
+                else {
+                    Delegate.save(delegate).then(
+                        function (success) {
+                            $scope.closeThisDialog();
+                        },
+                        function (error) {
+                            // Inform user about the error.
+                            var message = '';
+                            for (var e in error.data) {
+                                message += e + ': ' + error.data[e] + ' ';
+                            }
+                            $scope.alert = {type: 'danger', msg: message, show: true};
+                        }
+                    );
+                }
+            });
+        };
 
 
-            $scope.closeThisDialog();
+    }
+])
+
+.controller('VotingShareImportCtrl', [
+    '$scope',
+    'gettext',
+    'VotingShare',
+    'User',
+    'Category',
+    function ($scope, gettext, VotingShare, User, Category) {
+        $scope.delegateShares = [];
+
+        // Initialize csv settings.
+        $scope.separator = ',';
+        $scope.encoding = 'UTF-8';
+        $scope.encodingOptions = ['UTF-8', 'ISO-8859-1'];
+        $scope.csv = {
+            content: null,
+            header: true,
+            headerVisible: false,
+            separator: $scope.separator,
+            separatorVisible: false,
+            encoding: $scope.encoding,
+            encodingVisible: false,
+            accept: '.csv, .txt',
+            result: null
+        };
+
+        // Set csv file encoding.
+        $scope.setEncoding = function () {
+            $scope.csv.encoding = $scope.encoding;
+        };
+
+        // Set csv separator.
+        $scope.setSeparator = function () {
+            $scope.csv.separator = $scope.separator;
+        };
+
+        // Process csv file once it's loaded.
+        // csv format: number, first_name, last_name, category, shares
+        $scope.$watch('csv.result', function () {
+            $scope.delegateShares = [];
+            var rePattern = /^"(.*)"$/;
+            angular.forEach($scope.csv.result, function (record) {
+                var delegateShare = {};
+
+                // Get user data removing text separator (double quotes).
+                if (record.number) {
+                    delegateShare.number = record.number.replace(rePattern, '$1');
+                }
+                if (record.first_name) {
+                    delegateShare.first_name = record.first_name.replace(rePattern, '$1');
+                    delegateShare.last_name = '';
+                }
+                if (record.last_name) {
+                    delegateShare.last_name = record.last_name.replace(rePattern, '$1');
+                    if (delegateShare.first_name === undefined) {
+                        delegateShare.first_name = '';
+                    }
+                }
+
+                // Validate user: Does user exist in store?
+                var users = User.filter(delegateShare);
+                if (users.length == 1) {
+                    delegateShare.delegate_id = users[0].id;
+                    delegateShare.first_name = users[0].first_name;
+                    delegateShare.last_name = users[0].last_name;
+                }
+                else {
+                    delegateShare.importerror = true;
+                    delegateShare.user_error = gettext('Error: Delegate not found.');
+                }
+
+                // Get and validate category.
+                if (record.category) {
+                    delegateShare.category = record.category.replace(rePattern, '$1');
+                    var cats = Category.filter({name: delegateShare.category});
+                    if (cats.length == 1) {
+                        delegateShare.category_id = cats[0].id;
+                    }
+                    else {
+                        delegateShare.importerror = true;
+                        delegateShare.category_error = gettext('Error: Category not found.');
+                    }
+                }
+                else {
+                    delegateShare.importerror = true;
+                    delegateShare.category_error = gettext('Error: No category provided.');
+                }
+
+                // Get and validate shares.
+                if (record.shares) {
+                    delegateShare.shares = record.shares.replace(rePattern, '$1');
+                    if (isNaN(parseFloat(delegateShare.shares))) {
+                        delegateShare.importerror = true;
+                        delegateShare.shares_error = gettext('Error: Not a valid number.');
+                    }
+                }
+                else {
+                    delegateShare.importerror = true;
+                    delegateShare.shares_error = gettext('Error: No number provided.');
+                }
+
+                $scope.delegateShares.push(delegateShare);
+            });
+        });
+
+        // Import validated voting shares.
+        $scope.import = function () {
+            $scope.csvImporting = true;
+            angular.forEach($scope.delegateShares, function (delegateShare) {
+                if (!delegateShare.importerror) {
+                    var vss = VotingShare.filter({
+                        delegate_id: delegateShare.delegate_id,
+                        category_id: delegateShare.category_id
+                    });
+                    if (vss.length == 1) {
+                        vss[0].shares = delegateShare.shares;
+                        VotingShare.save(vss[0]).then(function (success) {
+                            delegateShare.imported = true;
+                        });
+                    }
+                    else {
+                        VotingShare.create({
+                            delegate_id: delegateShare.delegate_id,
+                            category_id: delegateShare.category_id,
+                            shares: delegateShare.shares
+                        }).then(function (success) {
+                            delegateShare.imported = true;
+                        });
+                    }
+                }
+            });
+            $scope.csvImported = true;
+        };
+
+        // Clear csv import preview.
+        $scope.clear = function () {
+            $scope.csv.result = null;
+        };
+    }
+])
+
+.controller('AbsenteevoteListCtrl', [
+    '$scope',
+    'ngDialog',
+    'AbsenteeVote',
+    function ($scope, ngDialog, AbsenteeVote) {
+        AbsenteeVote.bindAll({}, $scope, 'absenteeVotes');
+        $scope.alert = {};
+
+        // Handle table column sorting.
+        $scope.sortColumn = 'first_name';
+        $scope.reverse = false;
+        $scope.toggleSort = function (column) {
+            if ( $scope.sortColumn === column ) {
+                $scope.reverse = !$scope.reverse;
+            }
+            $scope.sortColumn = column;
+        };
+
+        // Define custom search filter string.
+        $scope.getFilterString = function (absenteeVote) {
+            return [
+                absenteeVote.user.full_name,
+                absenteeVote.motion_title,
+                absenteeVote.vote
+            ].join(' ');
+        };
+    }
+])
+
+.controller('AbsenteevoteImportCtrl', [
+    '$scope',
+    'gettext',
+    'AbsenteeVote',
+    'User',
+    'Motion',
+    function ($scope, gettext, AbsenteeVote, User, Motion) {
+        $scope.delegateVotes = [];
+
+        // Initialize csv settings.
+        $scope.separator = ',';
+        $scope.encoding = 'UTF-8';
+        $scope.encodingOptions = ['UTF-8', 'ISO-8859-1'];
+        $scope.csv = {
+            content: null,
+            header: true,
+            headerVisible: false,
+            separator: $scope.separator,
+            separatorVisible: false,
+            encoding: $scope.encoding,
+            encodingVisible: false,
+            accept: '.csv, .txt',
+            result: null
+        };
+
+        // Set csv file encoding.
+        $scope.setEncoding = function () {
+            $scope.csv.encoding = $scope.encoding;
+        };
+
+        // Set csv separator.
+        $scope.setSeparator = function () {
+            $scope.csv.separator = $scope.separator;
+        };
+        // Process csv file once it's loaded.
+        // csv format: number, first_name, last_name, motion, vote
+        $scope.$watch('csv.result', function () {
+            $scope.delegateVotes = [];
+            var rePattern = /^"(.*)"$/;
+            angular.forEach($scope.csv.result, function (record) {
+                var delegateVote = {};
+
+                // Get user data removing text separator (double quotes).
+                if (record.number) {
+                    delegateVote.number = record.number.replace(rePattern, '$1');
+                }
+                if (record.first_name) {
+                    delegateVote.first_name = record.first_name.replace(rePattern, '$1');
+                    delegateVote.last_name = '';
+                }
+                if (record.last_name) {
+                    delegateVote.last_name = record.last_name.replace(rePattern, '$1');
+                    if (delegateVote.first_name === undefined) {
+                        delegateVote.first_name = '';
+                    }
+                }
+
+                // Validate user: Does user exist in store?
+                var users = User.filter(delegateVote);
+                if (users.length == 1) {
+                    delegateVote.delegate_id = users[0].id;
+                    delegateVote.first_name = users[0].first_name;
+                    delegateVote.last_name = users[0].last_name;
+                }
+                else {
+                    delegateVote.importerror = true;
+                    delegateVote.user_error = gettext('Error: Delegate not found.');
+                }
+
+                // Get and validate motion.
+                if (record.motion) {
+                    delegateVote.motion_title = record.motion.replace(rePattern, '$1');
+                    angular.forEach(Motion.getAll(), function (motion) {
+                        if (motion.getTitle() == this.motion_title) {
+                            this.motion_id = motion.id;
+                        }
+                    }, delegateVote);
+                    if (delegateVote.motion_id === undefined) {
+                        delegateVote.importerror = true;
+                        delegateVote.motion_error = gettext('Error: Motion not found.');
+                    }
+                }
+                else {
+                    delegateVote.importerror = true;
+                    delegateVote.motion_error = gettext('Error: No motion provided.');
+                }
+
+                // Get and validate vote.
+                if (record.vote) {
+                    delegateVote.vote = record.vote.replace(rePattern, '$1');
+                    if (['Y', 'N', 'A'].indexOf(delegateVote.vote) == -1) {
+                        delegateVote.importerror = true;
+                        delegateVote.vote_error = gettext('Error: Invalid vote.');
+                    }
+                }
+                else {
+                    delegateVote.importerror = true;
+                    delegateVote.vote_error = gettext('Error: No vote provided.');
+                }
+
+                $scope.delegateVotes.push(delegateVote);
+            });
+        });
+
+        // Import validated absentee votes.
+        $scope.import = function () {
+            $scope.csvImporting = true;
+            // TODO: clear votes first
+            //angular.forEach(AbsenteeVote.getAll(), function (absenteeVote) {
+            //    AbsenteeVote.destroy(absenteeVote);
+            //});
+            // 
+            angular.forEach($scope.delegateVotes, function (delegateVote) {
+                if (!delegateVote.importerror) {
+                    var avs = AbsenteeVote.filter({
+                        delegate_id: delegateVote.delegate_id,
+                        motion_id: delegateVote.motion_id
+                    });
+                    if (avs.length == 1) {
+                        avs[0].vote = delegateVote.vote;
+                        AbsenteeVote.save(avs[0]).then(function (success) {
+                            delegateVote.imported = true;
+                        });
+                    }
+                    else {
+                        AbsenteeVote.create({
+                            delegate_id: delegateVote.delegate_id,
+                            motion_id: delegateVote.motion_id,
+                            vote: delegateVote.vote
+                        }).then(function (success) {
+                            delegateVote.imported = true;
+                        });
+                    }
+                }
+            });
+            $scope.csvImported = true;
+        };
+
+        // Clear csv import preview.
+        $scope.clear = function () {
+            $scope.csv.result = null;
         };
     }
 ])

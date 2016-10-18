@@ -1,0 +1,66 @@
+<div class="header">
+  <div class="title">
+    <div class="submenu">
+      <a ui-sref="openslides_proxyvoting.delegate.list" class="btn btn-sm btn-default">
+        <i class="fa fa-angle-double-left fa-lg"></i>
+        <translate>Back to overview</translate>
+      </a>
+      <a ui-sref="openslides_proxyvoting.absenteevote.import" class="btn btn-default btn-sm">
+        <i class="fa fa-download fa-lg"></i>
+        <translate>Import</translate>
+      </a>
+    </div>
+    <h1 translate>Absentee Votes</h1>
+  </div>
+</div>
+
+<div class="details">
+  <div class="row form-group">
+    <div class="col-sm-4 pull-right">
+      <input type="text" ng-model="filter.search" class="form-control"
+          placeholder="{{ 'Filter' | translate }}">
+    </div>
+  </div>
+
+  <table class="table table-striped table-bordered table-hover">
+    <thead>
+      <tr>
+        <!-- Delegate column -->
+        <th ng-click="toggleSort('user.first_name')" class="sortable">
+          <translate>Delegate</translate>
+          <i class="pull-right fa" ng-show="sortColumn === 'user.first_name' && header.sortable != false"
+              ng-class="reverse ? 'fa-sort-desc' : 'fa-sort-asc'">
+          </i>
+
+        <!-- Motion column -->
+        <th ng-click="toggleSort('motion_title')" class="sortable">
+          <translate>Motion</translate>
+          <i class="pull-right fa" ng-show="sortColumn === 'motion_title' && header.sortable != false"
+              ng-class="reverse ? 'fa-sort-desc' : 'fa-sort-asc'">
+          </i>
+
+        <!-- Vote column -->
+        <th ng-click="toggleSort('vote')" class="sortable">
+          <translate>Absentee vote</translate>
+          <i class="pull-right fa" ng-show="sortColumn === 'vote' && header.sortable != false"
+              ng-class="reverse ? 'fa-sort-desc' : 'fa-sort-asc'">
+          </i>
+
+    <tbody>
+      <tr ng-repeat="absenteeVote in absenteeVotes | osFilter:filter.search:getFilterString |
+        orderBy:sortColumn:reverse">
+
+        <!-- Delegate -->
+        <td>
+        {{ absenteeVote.user.full_name }}
+
+        <!-- Motion -->
+        <td>
+          {{ absenteeVote.motion_title }}
+
+        <!-- Vote -->
+        <td>
+          {{ absenteeVote.vote }}
+  </table>
+
+</div>

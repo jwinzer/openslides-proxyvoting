@@ -5,13 +5,13 @@
         <i class="fa fa-check-square-o fa-lg"></i>
         <translate>Attendance</translate>
       </a>
-      <a ng-click="" class="btn btn-default btn-sm">
+      <a ui-sref="openslides_proxyvoting.absenteevote.list" class="btn btn-default btn-sm">
         <i class="fa fa-file-text-o fa-lg"></i>
         <translate>Absentee votes</translate>
       </a>
-      <a ng-click="" class="btn btn-default btn-sm">
+      <a ui-sref="openslides_proxyvoting.delegate.import" class="btn btn-default btn-sm">
         <i class="fa fa-download fa-lg"></i>
-        <translate>Import</translate>
+        <translate>Import voting shares</translate>
       </a>
     </div>
     <h1 translate>Delegates</h1>
@@ -55,19 +55,22 @@
   </div>
 
   <div class="spacer-top-lg italic">
+    <div ng-repeat="d in delegatesCanVote = (delegates | filter:{status: 'can_vote'})"></div>
+    <div ng-repeat="d in delegatesRepresented = (delegates | filter:{status: 'has_proxy'})"></div>
+    <div ng-repeat="d in delegatesInactive = (delegates | filter:{status: 'inactive'})"></div>
     {{ delegatesFiltered.length }} / {{ delegates.length }} {{ "delegates" | translate }},
-    <!-- TODO: registered and represented does not update when proxies change. -->
-    {{ registered }} {{ "registered" | translate }},
-    {{ represented }} {{ "represented" | translate }}
+    {{ delegatesCanVote.length }} {{ "registered" | translate }},
+    {{ delegatesRepresented.length }} {{ "represented" | translate }},
+    {{ delegatesInactive.length }} {{ "inactive" | translate }}
   </div>
 
   <table class="table table-striped table-bordered table-hover">
     <thead>
       <tr>
         <!-- Delegate column -->
-        <th ng-click="toggleSort('delegate')" class="sortable">
+        <th ng-click="toggleSort('user.first_name')" class="sortable">
           <translate>Delegate</translate>
-          <i class="pull-right fa" ng-show="sortColumn === 'delegate' && header.sortable != false"
+          <i class="pull-right fa" ng-show="sortColumn === 'user.first_name' && header.sortable != false"
               ng-class="reverse ? 'fa-sort-desc' : 'fa-sort-asc'">
           </i>
 
@@ -79,27 +82,23 @@
           </i>
 
         <!-- Keypad column -->
-        <th ng-click="toggleSort('keypad')" class="sortable">
+        <th ng-click="toggleSort('keypad.keypad_id')" class="sortable">
           <translate>Keypad</translate>
-          <i class="pull-right fa" ng-show="sortColumn === 'keypad' && header.sortable != false"
+          <i class="pull-right fa" ng-show="sortColumn === 'keypad.keypad_id' && header.sortable != false"
               ng-class="reverse ? 'fa-sort-desc' : 'fa-sort-asc'">
           </i>
 
         <!-- Proxy column -->
-        <th ng-click="toggleSort('proxy')" class="sortable">
+        <th ng-click="toggleSort('proxy.rep.first_name')" class="sortable">
           <translate>Proxy</translate>
-          <i class="pull-right fa" ng-show="sortColumn === 'proxy' && header.sortable != false"
+          <i class="pull-right fa" ng-show="sortColumn === 'proxy.rep.first_name' && header.sortable != false"
               ng-class="reverse ? 'fa-sort-desc' : 'fa-sort-asc'">
           </i>
 
         <!-- Shares columns -->
-        <!-- FIXME: sorting does not work -->
-        <th ng-repeat="category in (categories | orderBy:'id')"
-            ng-click="toggleSort(category.name)" class="optional">
+        <!-- TODO: add sorting -->
+        <th ng-repeat="category in (categories | orderBy:'id')" class="optional">
           <translate>{{ category.name }}</translate>
-          <i class="pull-right fa" ng-show="sortColumn === category.name && header.sortable != false"
-              ng-class="reverse ? 'fa-sort-desc' : 'fa-sort-asc'">
-          </i>
 
     <tbody>
       <!-- FIXME: status is not refreshed when proxies have changed. -->
@@ -123,12 +122,12 @@
 
         <!-- Keypad -->
         <td>
-          {{ delegate.getKeypad().keypad_id }}
+          {{ delegate.keypad.keypad_id }}
 
         <!-- Proxy -->
         <td>
-          <span ng-if="delegate.getProxy()" >{{ delegate.getProxy().rep.full_name }}</span>
-          <span ng-if="!delegate.getProxy()">–</span>
+          <span ng-if="delegate.proxy" >{{ delegate.proxy.rep.full_name }}</span>
+          <span ng-if="!delegate.proxy">–</span>
 
         <!-- Shares collection, categories must be sorted in the same order as the header -->
         <!-- TODO: Limit to 3 categories. -->

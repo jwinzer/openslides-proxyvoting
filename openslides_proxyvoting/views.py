@@ -1,3 +1,4 @@
+from django.shortcuts import Http404
 from rest_framework.response import Response
 
 from openslides.users.models import User
@@ -50,3 +51,6 @@ class DelegateViewSet(ModelViewSet):
         qs = User.objects.filter(groups=2)
         serializer = DelegateSerializer(qs, many=True)
         return Response(serializer.data)
+
+    def create(self, request, *args, **kwargs):
+        raise Http404
