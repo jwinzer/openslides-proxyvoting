@@ -47,6 +47,7 @@ class Ballot:
         """
         self.poll = poll
         self.admitted_delegates = None
+        self.new_ballots = None
         self.updated = 0
         self._clear_result()
 
@@ -83,15 +84,17 @@ class Ballot:
             self.updated += 1
         return self.updated
 
-    def register_vote(self, keypad, vote):
+    def register_vote(self, keypad, vote, commit=True):
         """
         Register a vote and all proxy votes by creating MotionPollBallot objects for the voter and any delegate
         represented by the voter.
 
         :param keypad: Keypad ID
         :param vote: Vote, typically 'Y', 'N', 'A'
+        :param commit: if True saves new MotionPollBallot instances else caches them in self.new_ballots
         :return: Number of ballots created or updated.
         """
+        self.commit = commit
         self.updated = 0
         # Get delegate user the keypad is assigned to.
         # NOTE: We allow a delegate to vote even if he has a proxy! The rule is not to assign a keypad to a
@@ -111,8 +114,18 @@ class Ballot:
             absenteevote__motion=self.poll.motion
         ).values_list('id', flat=True)
 
+        if commit and self.new_ballots is None:
+            self.new_ballots = []
         self._register_proxy_votes(voter, vote)
         return self.updated
+
+    def save_ballots(self):
+        """
+        Bulk saves cached motion poll ballots.
+        :return:
+        """
+        if self.new_ballots:
+            MotionPollBallot.objects.bulk_create(self.new_ballots)
 
     def count_votes(self):
         """
@@ -150,8 +163,17 @@ class Ballot:
 
     def _create_ballot(self, delegate, vote):
         if delegate.id in self.admitted_delegates:
-            MotionPollBallot.objects.update_or_create(
-                poll=self.poll, delegate=delegate, defaults={'vote': vote})
+            try:
+                mpb = MotionPollBallot.objects.get(poll=self.poll, delegate=delegate)
+                mpb.vote = vote
+                mpb.save()
+            except MotionPollBallot.DoesNotExist:
+                mpb = MotionPollBallot(poll=self.poll, delegate=delegate)
+            mpb.vote = vote
+            if mpb.pk or self.new_ballots is None:
+                mpb.save()
+            else:
+                self.new_ballots.append(mpb)
             self.updated += 1
 
     def _clear_result(self):

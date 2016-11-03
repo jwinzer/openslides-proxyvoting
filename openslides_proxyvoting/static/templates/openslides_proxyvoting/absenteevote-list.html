@@ -10,7 +10,7 @@
         <translate>Import</translate>
       </a>
     </div>
-    <h1 translate>Absentee Votes</h1>
+    <h1 translate>Weisungen</h1>
   </div>
 </div>
 
@@ -27,7 +27,7 @@
       <tr>
         <!-- Delegate column -->
         <th ng-click="toggleSort('user.first_name')" class="sortable">
-          <translate>Delegate</translate>
+          <translate>Delegierte/r</translate>
           <i class="pull-right fa" ng-show="sortColumn === 'user.first_name' && header.sortable != false"
               ng-class="reverse ? 'fa-sort-desc' : 'fa-sort-asc'">
           </i>
@@ -41,7 +41,7 @@
 
         <!-- Vote column -->
         <th ng-click="toggleSort('vote')" class="sortable">
-          <translate>Absentee vote</translate>
+          <translate>Weisung</translate>
           <i class="pull-right fa" ng-show="sortColumn === 'vote' && header.sortable != false"
               ng-class="reverse ? 'fa-sort-desc' : 'fa-sort-asc'">
           </i>

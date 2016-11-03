@@ -106,6 +106,7 @@ angular.module('OpenSlidesApp.openslides_proxyvoting.site', [
                 }
             }
         })
+        // TODO: Add, edit, delete absentee vote.
     }
 ])
     
@@ -153,8 +154,8 @@ angular.module('OpenSlidesApp.openslides_proxyvoting.site', [
                         key: 'seat_id',
                         type: 'select-single',
                         templateOptions: {
-                            label: gettextCatalog.getString('Seat'),
-                            options: Seat.filter({ orderBy: 'number' }),
+                            label: gettextCatalog.getString('Sitznummer'),
+                            options: Seat.filter({ orderBy: 'id' }),
                             ngOptions: 'option.id as option.number for option in to.options',
                             placeholder: gettextCatalog.getString('--- Select seat ---')
                         }
@@ -170,20 +171,20 @@ angular.module('OpenSlidesApp.openslides_proxyvoting.site', [
                         key: 'proxy_id',
                         type: 'select-single',
                         templateOptions: {
-                            label: gettextCatalog.getString('Represented by (proxy)'),
+                            label: gettextCatalog.getString('Vertreten durch'),
                             options: otherDelegates,
                             ngOptions: 'option.id as option.full_name for option in to.options',
-                            placeholder: '(' + gettextCatalog.getString('No proxy') + ')'
+                            placeholder: '(' + gettextCatalog.getString('Keine Vertretung') + ')'
                         }
                     },
                     {
                         key: 'mandates_id',
                         type: 'select-multiple',
                         templateOptions: {
-                            label: gettextCatalog.getString('Mandates'),
+                            label: gettextCatalog.getString('Vollmachten für'),
                             options: otherDelegates,
                             ngOptions: 'option.id as option.full_name for option in to.options',
-                            placeholder: '(' + gettextCatalog.getString('No mandates') + ')'
+                            placeholder: '(' + gettextCatalog.getString('Keine Vollmachten') + ')'
                         }
                     }
                 ];
@@ -205,13 +206,21 @@ angular.module('OpenSlidesApp.openslides_proxyvoting.site', [
         $scope.alert = {};
 
         // Handle table column sorting.
-        $scope.sortColumn = 'first_name';
+        $scope.sortColumn = 'last_name';
         $scope.reverse = false;
         $scope.toggleSort = function (column) {
             if ( $scope.sortColumn === column ) {
                 $scope.reverse = !$scope.reverse;
             }
             $scope.sortColumn = column;
+        };
+
+        // Set up pagination.
+        $scope.currentPage = 1;
+        $scope.itemsPerPage = 50;
+        $scope.limitBegin = 0;
+        $scope.pageChanged = function () {
+            $scope.limitBegin = ($scope.currentPage - 1) * $scope.itemsPerPage;
         };
 
         // Define custom search filter string.
@@ -434,6 +443,7 @@ angular.module('OpenSlidesApp.openslides_proxyvoting.site', [
                     }
                 }
             });
+            // TODO: only display rows that have not yet been imported
             $scope.csvImported = true;
         };
 
@@ -509,6 +519,7 @@ angular.module('OpenSlidesApp.openslides_proxyvoting.site', [
         };
         // Process csv file once it's loaded.
         // csv format: number, first_name, last_name, motion, vote
+        // TODO: Add column motion_identifier.
         $scope.$watch('csv.result', function () {
             $scope.delegateVotes = [];
             var rePattern = /^"(.*)"$/;
@@ -580,7 +591,7 @@ angular.module('OpenSlidesApp.openslides_proxyvoting.site', [
         // Import validated absentee votes.
         $scope.import = function () {
             $scope.csvImporting = true;
-            // TODO: clear votes first
+            // TODO: clear votes first?
             //angular.forEach(AbsenteeVote.getAll(), function (absenteeVote) {
             //    AbsenteeVote.destroy(absenteeVote);
             //});

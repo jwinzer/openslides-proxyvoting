@@ -6,7 +6,7 @@
         <translate>Back to overview</translate>
       </a>
     </div>
-    <h1 translate>Import absentee votes</h1>
+    <h1 translate>Weisungen importieren</h1>
   </div>
 </div>
 
@@ -36,13 +36,13 @@
   </div>
 
   <h4 translate>Please note:</h4>
-  <ul>
+  <ul class="indentation">
       <li><translate>
         Required comma or semicolon separated values with these column header names in the first row
       </translate>:<br>
           <code>number, first_name, last_name, motion, vote</code>
-      <li translate>If you specify the participant number first_name and last_name is optional.
-      <li translate>Participant and motion must exist for absentee votes to be imported.
+      <li translate>Wenn number angegeben ist, sind first_name und last_name optional.
+      <li translate>Es werden nur Weisungen für vorhandene Delegierte importiert.
       <li translate>Only double quotes are accepted as text delimiter (no single quotes).
   </ul>
 
@@ -54,11 +54,11 @@
         <tr>
           <th>
           <th>#
-          <th translate>Participant
+          <th translate>Delegierte/r
           <th translate>Motion
-          <th translate>Absentee vote</th>
+          <th translate>Weisung</th>
       <tbody>
-        <tr ng-repeat="delegateVote in delegateVotes | limitTo : itemsPerPage : limitBegin">
+        <tr ng-repeat="delegateVote in delegateVotes">
           <td class="minimum"
               ng-class="{ 'text-danger': delegateVote.importerror, 'text-success': delegateVote.imported }">
             <span ng-if="delegateVote.importerror">
@@ -96,20 +96,20 @@
     <div ng-if="delegateVotesFailed.length > 0" class="text-danger">
       <i class="fa fa-exclamation-triangle"></i>
       {{ delegateVotesFailed.length }}
-      <translate>absentee votes will not be imported.</translate>
+      <translate>Weisungen werden nicht imported.</translate>
     </div>
     <div>
       <div ng-repeat="delegateVote in delegateVotesPassed = (delegateVotes | filter:{importerror:false})"></div>
       <i class="fa fa-check-circle-o fa-lg"></i>
       {{ delegateVotes.length - delegateVotesFailed.length }}
-      <translate>absentee votes will be imported.</translate>
+      <translate>Weisungen werden imported.</translate>
     </div>
     <div ng-repeat="delegateVote in delegateVotesImported = (delegateVotes | filter:{imported:true})"></div>
     <div ng-if="delegateVotesImported.length > 0" class="text-success">
       <hr class="smallhr">
       <i class="fa fa-check-circle fa-lg"></i>
       {{ delegateVotesImported.length }}
-      <translate>absentee votes were successfully imported.</translate>
+      <translate>Weisungen sind erfolgreich importiert worden.</translate>
     </div>
 
     <div class="spacer">
@@ -117,7 +117,7 @@
         Clear preview
       </button>
       <button ng-if="!csvImporting" ng-click="import()" class="btn btn-primary" translate>
-        Import {{ delegateVotes.length - delegateVotesFailed.length }} absentee votes
+        Importiere {{ delegateVotes.length - delegateVotesFailed.length }} Weisungen
       </button>
     </div>
     <div class="spacer">
