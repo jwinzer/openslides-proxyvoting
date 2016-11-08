@@ -128,7 +128,6 @@ angular.module('OpenSlidesApp.openslides_proxyvoting', [
                 },
                 updateKeypad: function (promises, onFailed) {
                     // Update keypad with this.keypad_id, this.seat.
-                    // TODO: Catch create/save failures.
                     var kp = this.getKeypad();
                     if (this.keypad_id) {
                         if (kp) {
@@ -228,8 +227,7 @@ angular.module('OpenSlidesApp.openslides_proxyvoting', [
                         delegate_id: this.id,
                         category_id: category_id
                     });
-                    // FIXME: Allow floating point shares.
-                    return vss.length == 1 ? vss[0].shares.split('.')[0] : null;
+                    return vss.length == 1 ? vss[0].shares : null;
                 }
             }
         });

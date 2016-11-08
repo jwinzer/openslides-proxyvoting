@@ -73,6 +73,15 @@ angular.module('OpenSlidesApp.openslides_proxyvoting.site', [
                 }
             }
         })
+        .state('openslides_proxyvoting.delegate.attendance', {
+            url: '/attendance',
+            controller: 'DelegateAttendanceCtrl',
+            resolve: {
+                categories: function (Category) {
+                    return Category.findAll();
+                }
+            }
+        })
         .state('openslides_proxyvoting.absenteevote', {
             url: '/absenteevote',
             abstract: true,
@@ -106,7 +115,7 @@ angular.module('OpenSlidesApp.openslides_proxyvoting.site', [
                 }
             }
         })
-        // TODO: Add, edit, delete absentee vote.
+        // TODO: Add, edit absentee vote.
     }
 ])
     
@@ -198,9 +207,11 @@ angular.module('OpenSlidesApp.openslides_proxyvoting.site', [
     'ngDialog',
     'DelegateForm',
     'Delegate',
+    'User',
+    'Keypad',
     'VotingProxy',
     'Category',
-    function ($scope, ngDialog, DelegateForm, Delegate, VotingProxy, Category) {
+    function ($scope, ngDialog, DelegateForm, Delegate, User, Keypad, VotingProxy, Category) {
         Delegate.bindAll({}, $scope, 'delegates');
         Category.bindAll({}, $scope, 'categories');
         $scope.alert = {};
@@ -243,6 +254,16 @@ angular.module('OpenSlidesApp.openslides_proxyvoting.site', [
         $scope.openDialog = function (delegate) {
             ngDialog.open(DelegateForm.getDialog(delegate));
         };
+
+        // Count attending, represented and absent delegates.
+        $scope.$watch(function () {
+            return User.lastModified() + Keypad.lastModified() + VotingProxy.lastModified();
+        }, function () {
+            $scope.attendingCount = Keypad.filter({ 'user.is_present': true }).length;
+            $scope.representedCount = VotingProxy.getAll().length;
+            $scope.absentCount = Math.max(0,
+                $scope.delegates.length - $scope.attendingCount - $scope.representedCount);
+        });
     }
 ])
 
@@ -256,7 +277,7 @@ angular.module('OpenSlidesApp.openslides_proxyvoting.site', [
     function ($scope, $q, Delegate, User, DelegateForm, delegate) {
         var kp = delegate.getKeypad(),
             vp = delegate.getProxy(),
-            message = '',
+            message,
             onFailed = function (error) {
                 for (var e in error.data) {
                     message += e + ': ' + error.data[e] + ' ';
@@ -276,6 +297,17 @@ angular.module('OpenSlidesApp.openslides_proxyvoting.site', [
         $scope.formFields = DelegateForm.getFormFields(delegate.id);
 
         $scope.save = function (delegate) {
+            message = '';
+            $scope.alert = {};
+
+            // Check for circular proxy reference.
+            if (delegate.mandates_id.indexOf(delegate.proxy_id) >= 0) {
+                message = User.get(delegate.proxy_id).full_name +
+                    ' kann nicht gleichzeitig Vertreter und Vollmachtgeber sein.'
+                $scope.alert = {type: 'danger', msg: message, show: true};
+                return;
+            }
+
             // Update keypad, proxy, mandates, user and collect their promises.
             var promises = [];
             delegate.updateKeypad(promises, onFailed);
@@ -285,31 +317,31 @@ angular.module('OpenSlidesApp.openslides_proxyvoting.site', [
             delegate.user.is_present = delegate.is_present;
             promises.push(User.save(delegate.id));
 
-            // Save delegate after all promises have been resolved.
-            // Delegate together with keypad, proxy and mandates is validated by the server.
+            // Wait until all promises have been resolved before closing dialog.
             $q.all(promises).then(function () {
                 if (message) {
                     $scope.alert = {type: 'danger', msg: message, show: true};
                 }
                 else {
-                    Delegate.save(delegate).then(
-                        function (success) {
-                            $scope.closeThisDialog();
-                        },
-                        function (error) {
-                            // Inform user about the error.
-                            var message = '';
-                            for (var e in error.data) {
-                                message += e + ': ' + error.data[e] + ' ';
-                            }
-                            $scope.alert = {type: 'danger', msg: message, show: true};
-                        }
-                    );
+                    $scope.closeThisDialog();
                 }
             });
         };
 
 
+    }
+])
+
+.controller('DelegateAttendanceCtrl', [
+    '$scope',
+    '$http',
+    'Category',
+    function ($scope, $http, Category) {
+        Category.bindAll({}, $scope, 'categories');
+
+        $http.get('/proxyvoting/attendance/shares/').then(function (success) {
+            $scope.attendance = success.data;
+        });
     }
 ])
 
@@ -463,7 +495,7 @@ angular.module('OpenSlidesApp.openslides_proxyvoting.site', [
         $scope.alert = {};
 
         // Handle table column sorting.
-        $scope.sortColumn = 'first_name';
+        $scope.sortColumn = 'last_name';
         $scope.reverse = false;
         $scope.toggleSort = function (column) {
             if ( $scope.sortColumn === column ) {
@@ -479,6 +511,45 @@ angular.module('OpenSlidesApp.openslides_proxyvoting.site', [
                 absenteeVote.motion_title,
                 absenteeVote.vote
             ].join(' ');
+        };
+
+        // Set up pagination.
+        $scope.currentPage = 1;
+        $scope.itemsPerPage = 20;
+        $scope.limitBegin = 0;
+        $scope.pageChanged = function () {
+            $scope.limitBegin = ($scope.currentPage - 1) * $scope.itemsPerPage;
+        };
+
+        // *** Delete mode functions. ***
+        $scope.isDeleteMode = false;
+        // Update all checkboxes.
+        $scope.checkAll = function () {
+            angular.forEach($scope.absenteeVotes, function (absenteeVote) {
+                absenteeVote.selected = $scope.selectedAll;
+            });
+        };
+        // Uncheck all checkboxes if delete mode is closed.
+        $scope.uncheckAll = function () {
+            if (!$scope.isDeleteMode) {
+                $scope.selectedAll = false;
+                angular.forEach($scope.absenteeVotes, function (absenteeVote) {
+                    absenteeVote.selected = false;
+                });
+            }
+        };
+        // Delete selected absentee votes.
+        $scope.deleteMultiple = function () {
+            angular.forEach($scope.absenteeVotes, function (absenteeVote) {
+                if (absenteeVote.selected)
+                    AbsenteeVote.destroy(absenteeVote.id);
+            });
+            $scope.isDeleteMode = false;
+            $scope.uncheckAll();
+        };
+        // Delete single absentee vote.
+        $scope.delete = function (absenteeVote) {
+            AbsenteeVote.destroy(absenteeVote.id);
         };
     }
 ])
@@ -591,11 +662,6 @@ angular.module('OpenSlidesApp.openslides_proxyvoting.site', [
         // Import validated absentee votes.
         $scope.import = function () {
             $scope.csvImporting = true;
-            // TODO: clear votes first?
-            //angular.forEach(AbsenteeVote.getAll(), function (absenteeVote) {
-            //    AbsenteeVote.destroy(absenteeVote);
-            //});
-            // 
             angular.forEach($scope.delegateVotes, function (delegateVote) {
                 if (!delegateVote.importerror) {
                     var avs = AbsenteeVote.filter({

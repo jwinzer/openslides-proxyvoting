@@ -3,7 +3,7 @@ from openslides.users.models import User
 from .models import AbsenteeVote, MotionPollBallot, VotingShare
 
 
-def get_authorized_voter(delegate, proxies=None):
+def find_authorized_voter(delegate, proxies=None):
     """
     Find the authorized voter of a delegate by recursively stepping through the proxy chain.
 
@@ -11,24 +11,33 @@ def get_authorized_voter(delegate, proxies=None):
     :param proxies: List of proxy IDs found so far, used to eliminate circular references
     :return: authorized user (the last one in the proxy chain)
     """
+    # NOTE: Function might be slow with many db hits.
     if hasattr(delegate, 'votingproxy'):
-        voter = delegate.votingproxy.proxy
+        rep = delegate.votingproxy.proxy
         if proxies is None:
             proxies = []
-        elif voter.id in proxies:
-            # ERROR: We have a circular reference. Delete the voting proxy to fix it.
-            # TODO: log error
-            voter.delete()
-            return None
+        elif rep.id in proxies:
+            # We have a circular reference. Delete the voting proxy to fix it.
+            # TODO: Log circular ref error and/or notify user.
+            delegate.votingproxy.delete()
+            return delegate
 
         # Add voter id to proxies list.
-        proxies.append(voter.id)
+        proxies.append(delegate.id)
 
         # Recursively step through the proxy chain.
-        return get_authorized_voter(voter, proxies)
+        return find_authorized_voter(rep, proxies)
 
-    # Delegate is only authorized if a keypad has been assigned.
-    return delegate if hasattr(delegate, 'keypad') else None
+    return delegate
+
+
+def is_registered(delegate):
+    """
+    Returns True if delegate is present and a keypad has been assigned.
+    :param delegate: User object
+    :return: bool
+    """
+    return delegate is not None and hasattr(delegate, 'keypad') and delegate.is_present
 
 
 class Ballot:
@@ -64,11 +73,12 @@ class Ballot:
     def create_absentee_ballots(self):
         """
         Creates MotionPollBallot objects for all voting delegates who have cast an absentee vote.
+        Objects are created even if the delegate is present or whether or not a proxy is present.
+        register_vote may override a MotionPollBallot created here.
 
-        :return: Number of ballots created.
+        :return: Number of ballots created or updated.
         """
         # Get a list of delegate IDs who have voting rights (shares) for the given motion.
-        # TODO: Does the proxy have to be present (user.is_present) for an absentee vote to be counted?
         delegates = User.objects.filter(
             shares__category=self.poll.motion.category,
             shares__shares__gt=0
@@ -77,17 +87,30 @@ class Ballot:
         qs = AbsenteeVote.objects.filter(
             motion=self.poll.motion, delegate__in=delegates)
         self.updated = 0
+        ballots = []
         for absentee_vote in qs:
-            # TODO: Call bulk_create unless post_save signal is required?
-            MotionPollBallot.objects.update_or_create(
-                poll=self.poll, delegate=absentee_vote.delegate, defaults={'vote': absentee_vote.vote})
+            try:
+                mpb = MotionPollBallot.objects.get(poll=self.poll, delegate=absentee_vote.delegate)
+            except MotionPollBallot.DoesNotExist:
+                mpb = MotionPollBallot(poll=self.poll, delegate=absentee_vote.delegate)
+            mpb.vote = absentee_vote.vote
+            if mpb.pk:
+                mpb.save()
+            else:
+                ballots.append(mpb)
             self.updated += 1
+        MotionPollBallot.objects.bulk_create(ballots)
         return self.updated
 
     def register_vote(self, keypad, vote, commit=True):
         """
         Register a vote and all proxy votes by creating MotionPollBallot objects for the voter and any delegate
         represented by the voter.
+
+        A vote is registered whether or not a proxy exists! The rule is not to assign a keypad to a
+        delegate represented by a proxy but we don't enforce this rule here.
+
+        MotionPollBallot objects will not be created for any delegate who submitted an absentee vote.
 
         :param keypad: Keypad ID
         :param vote: Vote, typically 'Y', 'N', 'A'
@@ -97,12 +120,9 @@ class Ballot:
         self.commit = commit
         self.updated = 0
         # Get delegate user the keypad is assigned to.
-        # NOTE: We allow a delegate to vote even if he has a proxy! The rule is not to assign a keypad to a
-        # delegate represented by a proxy but we don't enforce this rule here.
         try:
             voter = User.objects.get(keypad__keypad_id=keypad)
         except User.DoesNotExist:
-            # TODO: Log this.
             return self.updated
 
         # Get a list of delegate IDs who have voting rights (shares) for the given motion and haven't cast an
@@ -165,8 +185,6 @@ class Ballot:
         if delegate.id in self.admitted_delegates:
             try:
                 mpb = MotionPollBallot.objects.get(poll=self.poll, delegate=delegate)
-                mpb.vote = vote
-                mpb.save()
             except MotionPollBallot.DoesNotExist:
                 mpb = MotionPollBallot(poll=self.poll, delegate=delegate)
             mpb.vote = vote

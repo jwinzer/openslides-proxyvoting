@@ -19,6 +19,7 @@ class ProxyVotingAppConfig(AppConfig):
         from openslides.core.signals import post_permission_creation
         from openslides.utils.rest_api import router
         from .signals import add_permissions_to_builtin_groups
+        from .urls import urlpatterns
         from .views import (
             AbsenteeVoteViewSet,
             DelegateViewSet,
@@ -38,5 +39,5 @@ class ProxyVotingAppConfig(AppConfig):
         router.register(self.get_model('AbsenteeVote').get_collection_string(), AbsenteeVoteViewSet)
         router.register('openslides_proxyvoting/delegate', DelegateViewSet, 'delegate')
 
-        # TODO: Provide plugin urlpatterns to application configuration
-
+        # Provide plugin urlpatterns to application configuration.
+        self.urlpatterns = urlpatterns

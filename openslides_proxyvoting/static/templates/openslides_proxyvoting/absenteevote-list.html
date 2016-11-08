@@ -15,20 +15,55 @@
 </div>
 
 <div class="details">
-  <div class="row form-group">
+  <div class="row">
+    <div class="col-sm-6">
+      <!-- Delete mode -->
+      <button class="btn"
+          ng-class="isDeleteMode ? 'btn-primary' : 'btn-default'"
+          ng-click="isDeleteMode = !isDeleteMode; uncheckAll()">
+        <i class="fa fa-check-square-o"></i>
+        <translate>Select ...</translate>
+      </button>
+    </div>
     <div class="col-sm-4 pull-right">
+      <!-- Search/filter -->
       <input type="text" ng-model="filter.search" class="form-control"
           placeholder="{{ 'Filter' | translate }}">
     </div>
   </div>
 
+  <!-- Delete mode options -->
+  <div uib-collapse="!isDeleteMode" class="row spacer">
+    <div class="col-sm-12 text-left">
+      <!-- Delete button -->
+      <a ng-show="isDeleteMode"
+          ng-click="deleteMultiple()"
+          class="btn btn-primary">
+        <i class="fa fa-trash fa-lg"></i>
+        <translate>Ausgewählte Weisungen löschen</translate>
+      </a>
+    </div>
+  </div>
+
+  <div class="spacer-top-lg italic">
+    <div ng-repeat="av in absenteeVotesFiltered = (absenteeVotes | osFilter:filter.search:getFilterString |
+        orderBy:sortColumn:reverse)"></div>
+    {{ absenteeVotesFiltered.length }} / {{ absenteeVotes.length }} {{ "Weisungen" | translate }}
+    <span ng-if="(absenteeVotes | filter:{selected:true}).length > 0">,
+    {{(absenteeVotes | filter:{selected:true}).length}} {{ "selected" | translate }}</span>
+  </div>
+
   <table class="table table-striped table-bordered table-hover">
     <thead>
       <tr>
+        <!-- Delete selection column -->
+        <th ng-show="isDeleteMode" class="minimum deleteColumn">
+          <input type="checkbox" ng-model="$parent.selectedAll" ng-change="checkAll()">
+
         <!-- Delegate column -->
-        <th ng-click="toggleSort('user.first_name')" class="sortable">
+        <th ng-click="toggleSort('user.last_name')" class="sortable">
           <translate>Delegierte/r</translate>
-          <i class="pull-right fa" ng-show="sortColumn === 'user.first_name' && header.sortable != false"
+          <i class="pull-right fa" ng-show="sortColumn === 'user.last_name' && header.sortable != false"
               ng-class="reverse ? 'fa-sort-desc' : 'fa-sort-asc'">
           </i>
 
@@ -47,20 +82,33 @@
           </i>
 
     <tbody>
-      <tr ng-repeat="absenteeVote in absenteeVotes | osFilter:filter.search:getFilterString |
-        orderBy:sortColumn:reverse">
+      <tr ng-repeat="absenteeVote in absenteeVotesFiltered | limitTo:itemsPerPage:limitBegin"
+        class="animate-item" ng-class="{'selected':absenteeVote.selected}">
+
+        <!-- Delete selection -->
+        <td ng-show="isDeleteMode" class="deleteColumn">
+          <input type="checkbox" ng-model="absenteeVote.selected">
 
         <!-- Delegate -->
-        <td>
-        {{ absenteeVote.user.full_name }}
+        <td>{{ absenteeVote.user.full_name }}
 
         <!-- Motion -->
-        <td>
-          {{ absenteeVote.motion_title }}
+        <td>{{ absenteeVote.motion_title }}
 
         <!-- Vote -->
-        <td>
-          {{ absenteeVote.vote }}
+        <td>{{ absenteeVote.vote }}
   </table>
+
+  <ul uib-pagination
+      total-items="absenteeVotesFiltered.length"
+      items-per-page="itemsPerPage"
+      ng-model="currentPage"
+      ng-change="pageChanged()"
+      class="pagination-sm"
+      direction-links="false"
+      boundary-links="true"
+      first-text="&laquo;"
+      last-text="&raquo;">
+  </ul>
 
 </div>

@@ -1,7 +1,5 @@
 from django.db import models
-from django.utils.translation import ugettext as _
 
-from openslides.core.config import config
 from openslides.motions.models import Category, Motion, MotionPoll
 from openslides.users.models import User
 from openslides.utils.models import RESTModelMixin
@@ -36,17 +34,13 @@ class VotingProxy(RESTModelMixin, models.Model):
 
     class Meta:
         default_permissions = ()
-        # TODO: Currently, we use only one permission for this app.
+        # TODO: Review permissions.
         permissions = (
             ('can_manage', 'Can manage proxy voting'),
         )
 
     def __str__(self):
         return '%s >> %s' % (self.delegate, self.proxy)
-
-    def save(self, *args, **kwargs):
-        # TODO: Validate, prevent circular reference.
-        super(VotingProxy, self).save(*args, **kwargs)
 
 
 class AbsenteeVote(RESTModelMixin, models.Model):
@@ -70,7 +64,7 @@ class MotionPollBallot(models.Model):
     # voter = models.ForeignKey(User, on_delete=models.CASCADE, related_name='voter_set')
     # keypad = models.IntegerField(default=0)
     vote = models.CharField(max_length=1, blank=True)
-    # TODO: shares = models.DecimalField(max_digits=15, decimal_places=6)
+    # shares = models.DecimalField(max_digits=15, decimal_places=6)
 
     class Meta:
         default_permissions = ()
