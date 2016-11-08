@@ -95,6 +95,7 @@ angular.module('OpenSlidesApp.openslides_proxyvoting', [
                 }
             },
             computed: {
+                // Computed attributes don't get updated in the template!
                 proxy: function () {
                     return this.getProxy();
                 },

@@ -116,12 +116,13 @@
 
         <!-- Keypad -->
         <td class="text-center">
-          {{ delegate.keypad.keypad_id }}
+          {{ delegate.getKeypad().keypad_id }}
 
         <!-- Proxy -->
         <td>
-          <span ng-if="delegate.proxy" >{{ delegate.proxy.rep.full_name }}</span>
-          <span ng-if="!delegate.proxy">–</span>
+        <!-- Must use getProxy() instead of proxy to get updates. -->
+          <span ng-if="delegate.getProxy()" >{{ delegate.getProxy().rep.full_name }}</span>
+          <span ng-if="!delegate.getProxy()">–</span>
 
         <!-- Shares collection, categories must be sorted in the same order as the header -->
         <!-- TODO: Limit to 3 categories. -->
